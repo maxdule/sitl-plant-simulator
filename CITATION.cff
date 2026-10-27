@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "SITL plant simulator: legacy CNC spindle with an edge fault detector"
+type: software
+version: "1.0-release"
+date-released: "2026-10-27"
+authors:
+  - name: "maxdule"
+repository-code: "https://github.com/maxdule/sitl-plant-simulator"
+license: MIT
+keywords:
+  - Industry 4.0
+  - Software-in-the-Loop
+  - edge computing
+  - MQTT
+  - condition monitoring
+abstract: "Software-in-the-Loop simulation of a legacy CNC spindle with an edge fault detector (shock, variance, drift), MQTT transport, Node-RED, InfluxDB and Grafana, used for the verification in a diploma thesis on non-invasive machine monitoring for Serbian SMEs."

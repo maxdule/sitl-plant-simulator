@@ -1,0 +1,82 @@
+# Whole demo with one command:  docker compose up -d --build   (then: docker compose logs -f edge simulator)
+# Stop and remove everything:    docker compose down -v
+# Demo credentials only (local machine, no outside access): InfluxDB token sitl-token, Grafana admin/admin.
+
+# A fixed project name gives this stack its own volumes. Without it, data left by an older stack in the same
+# folder (InfluxDB with a different token) would be reused and every write would fail with "authorization not found".
+name: sitl_demo
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    ports: ["1883:1883"]
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/uptime' -C 1 -W 3 >/dev/null"]
+      interval: 3s
+      retries: 15
+
+  influxdb:
+    image: influxdb:2.7.11
+    ports: ["8086:8086"]
+    volumes: [influxdb_data:/var/lib/influxdb2]
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: adminpassword
+      DOCKER_INFLUXDB_INIT_ORG: sitl
+      DOCKER_INFLUXDB_INIT_BUCKET: factory
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: sitl-token
+    healthcheck:
+      # healthy only once the first-time setup is finished and the demo token is accepted
+      test: ["CMD-SHELL", "influx bucket list --org sitl --token sitl-token --host http://localhost:8086 | grep -q factory"]
+      interval: 3s
+      retries: 15
+
+  nodered:          # MQTT (factory/#) -> InfluxDB line protocol; flow in config/nodered/flows.json
+    image: nodered/node-red:4.0.9
+    ports: ["1880:1880"]
+    volumes:
+      - nodered_data:/data
+      - ./config/nodered/flows.json:/data/flows.json
+    depends_on:
+      mosquitto: {condition: service_healthy}
+      influxdb: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:1880/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/etc/grafana/dashboards:ro
+    depends_on:
+      influxdb: {condition: service_healthy}
+
+  edge:             # detection, alarms, buffering: edge.py
+    build: .
+    command: python edge.py
+    env_file: demo.env      # DEMO_MODE: manual or auto
+    depends_on:
+      mosquitto: {condition: service_healthy}
+      nodered: {condition: service_healthy}
+
+  simulator:        # virtual machine: simulator.py
+    build: .
+    command: python simulator.py
+    env_file: demo.env      # DEMO_MODE: manual or auto
+    depends_on:
+      mosquitto: {condition: service_healthy}
+      edge: {condition: service_started}
+
+volumes:
+  mosquitto_data:
+  influxdb_data:
+  nodered_data:

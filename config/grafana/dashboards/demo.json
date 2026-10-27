@@ -1,0 +1,441 @@
+{
+  "uid": "sitl-demo",
+  "title": "SITL demo: legacy CNC spindle",
+  "tags": [
+    "sitl"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "5s",
+  "time": {
+    "from": "now-10m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Machine state",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-sitl"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"factory\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"state\" and r._field == \"label\")\n  |> last()\n  |> keep(columns: [\"_value\"])"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "Normal": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "Normal"
+                },
+                "Variance Expansion": {
+                  "color": "orange",
+                  "index": 1,
+                  "text": "Variance Expansion"
+                },
+                "Progressive Drift": {
+                  "color": "blue",
+                  "index": 2,
+                  "text": "Progressive Drift"
+                },
+                "Acute Shock": {
+                  "color": "red",
+                  "index": 3,
+                  "text": "Acute Shock"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Vibration, 5 s aggregates (RMS, fitted amplitude, peak)",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 18,
+        "h": 5
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-sitl"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"factory\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"vib_rms\" or r._field == \"amp_hat\" or r._field == \"vib_peak\"))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: mm/s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^vib_peak.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Peak"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^vib_rms.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RMS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^amp_hat.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Fitted amplitude (2 Hz)"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "state-timeline",
+      "title": "Machine state history (what the operator would have seen)",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 6
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-sitl"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"factory\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"state\" and r._field == \"label\")\n  |> keep(columns: [\"_time\", \"_value\"])"
+        }
+      ],
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "rowHeight": 0.8,
+        "alignValue": "left",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "Normal": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "Normal"
+                },
+                "Variance Expansion": {
+                  "color": "orange",
+                  "index": 1,
+                  "text": "Variance Expansion"
+                },
+                "Progressive Drift": {
+                  "color": "blue",
+                  "index": 2,
+                  "text": "Progressive Drift"
+                },
+                "Acute Shock": {
+                  "color": "red",
+                  "index": 3,
+                  "text": "Acute Shock"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "fillOpacity": 80
+          },
+          "displayName": "State"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Temperature, 5 s mean / min / max",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-sitl"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"factory\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"temp_mean\" or r._field == \"temp_min\" or r._field == \"temp_max\"))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^temp_max.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Max"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^temp_mean.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mean"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^temp_min.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Min"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Edge latency (ms, log scale): mean, P99, max",
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-sitl"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"factory\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"latency_mean_ms\" or r._field == \"latency_p99_ms\" or r._field == \"latency_max_ms\"))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^latency_max_ms.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Max"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^latency_p99_ms.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "P99"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^latency_mean_ms.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mean"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Alarm transitions",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 14,
+        "h": 8
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-sitl"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"factory\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"alarms\" and (r._field == \"alarm_id\" or r._field == \"transition\"))\n  |> pivot(rowKey: [\"_time\", \"alarm_class\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"alarm_class\", \"transition\", \"alarm_id\"])\n  |> group()\n  |> sort(columns: [\"_time\"], desc: true)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Injected faults (ground truth, from the simulator)",
+      "gridPos": {
+        "x": 14,
+        "y": 18,
+        "w": 10,
+        "h": 8
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-sitl"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"factory\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"truth\" and r._field == \"event\")\n  |> group()\n  |> sort(columns: [\"_time\"], desc: true)\n  |> keep(columns: [\"_time\", \"fault\", \"_value\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^_value.*"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "event"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Waveform around the alarm raises (snapshots, 2 s before / 2 s after)",
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-sitl"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"factory\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"snapshot\" and r._field == \"vibration_mm_s\")"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: mm/s",
+          "custom": {
+            "insertNulls": 1000
+          },
+          "displayName": "${__field.labels.alarm_class}"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

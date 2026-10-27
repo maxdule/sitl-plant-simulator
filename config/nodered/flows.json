@@ -1,0 +1,230 @@
+[
+  {
+    "id": "tab1",
+    "type": "tab",
+    "label": "MQTT to InfluxDB"
+  },
+  {
+    "id": "broker",
+    "type": "mqtt-broker",
+    "name": "Mosquitto",
+    "broker": "mosquitto",
+    "port": "1883",
+    "clientid": "nodered",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "30",
+    "cleansession": false
+  },
+  {
+    "id": "in_factory",
+    "type": "mqtt in",
+    "z": "tab1",
+    "name": "factory/legacy_cnc_01/#",
+    "topic": "factory/legacy_cnc_01/#",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "broker",
+    "x": 170,
+    "y": 80,
+    "wires": [
+      [
+        "fmt"
+      ]
+    ]
+  },
+  {
+    "id": "in_truth",
+    "type": "mqtt in",
+    "z": "tab1",
+    "name": "sim ground truth",
+    "topic": "sim/legacy_cnc_01/truth",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "broker",
+    "x": 170,
+    "y": 140,
+    "wires": [
+      [
+        "fmt"
+      ]
+    ]
+  },
+  {
+    "id": "fmt",
+    "type": "function",
+    "z": "tab1",
+    "name": "to line protocol",
+    "func": "// MQTT message -> InfluxDB line protocol. Time stamp = Node-RED arrival time (ms); alarm points are kept strictly increasing.\nconst kind = msg.topic.split(\"/\").pop();\nconst p = msg.payload;\nconst now = Date.now();\nconst tag = \"asset=legacy_cnc_01\";\nconst num = o => Object.entries(o).filter(([k, v]) => typeof v === \"number\" && isFinite(v)).map(([k, v]) => `${k}=${v}`);\nconst lines = [];\n\nif (kind === \"telemetry\") {\n    lines.push(`telemetry,${tag} ${num(p).join(\",\")} ${now}`);\n} else if (kind === \"alarms\") {\n    const last = context.get(\"lastAlarmTs\") || 0;\n    const ts = Math.max(now, last + 1);   // never two alarm points in the same ms (InfluxDB would overwrite)\n    context.set(\"lastAlarmTs\", ts);\n    lines.push(`alarms,${tag},alarm_class=${p.alarm_class} alarm_id=\"${p.alarm_id}\",transition=\"${p.transition}\",${num(p).join(\",\")} ${ts}`);\n} else if (kind === \"state\") {\n    lines.push(`state,${tag} label=\"${p}\" ${now}`);\n} else if (kind === \"truth\") {\n    lines.push(`truth,${tag},fault=${p.fault} event=\"${p.event}\",seq=${p.seq},sim_t=${p.sim_t} ${now}`);\n} else if (kind === \"snapshot\") {\n    const last = p.sim_t[p.sim_t.length - 1];\n    p.seq.forEach((seq, i) => {          // one point per sample, placed relative to the arrival time\n        const ts = Math.round(now - (last - p.sim_t[i]) * 1000);\n        lines.push(`snapshot,${tag},alarm_class=${p.alarm_class} vibration_mm_s=${p.vibration_mm_s[i]},seq=${seq} ${ts}`);\n    });\n}\nif (lines.length === 0) { return null; }\nmsg.payload = lines.join(\"\\n\");\nmsg.headers = {\"Authorization\": \"Token sitl-token\", \"Content-Type\": \"text/plain\"};\nreturn msg;",
+    "outputs": 1,
+    "x": 400,
+    "y": 110,
+    "wires": [
+      [
+        "influx"
+      ]
+    ]
+  },
+  {
+    "id": "influx",
+    "type": "http request",
+    "z": "tab1",
+    "name": "write to InfluxDB",
+    "method": "POST",
+    "ret": "txt",
+    "url": "http://influxdb:8086/api/v2/write?org=sitl&bucket=factory&precision=ms",
+    "x": 620,
+    "y": 110,
+    "wires": [
+      [
+        "err"
+      ]
+    ]
+  },
+  {
+    "id": "err",
+    "type": "switch",
+    "z": "tab1",
+    "name": "HTTP error?",
+    "property": "statusCode",
+    "propertyType": "msg",
+    "rules": [
+      {
+        "t": "gte",
+        "v": "300",
+        "vt": "num"
+      }
+    ],
+    "checkall": "true",
+    "outputs": 1,
+    "x": 820,
+    "y": 110,
+    "wires": [
+      [
+        "dbg"
+      ]
+    ]
+  },
+  {
+    "id": "dbg",
+    "type": "debug",
+    "z": "tab1",
+    "name": "Influx error",
+    "active": true,
+    "complete": "payload",
+    "x": 1000,
+    "y": 110,
+    "wires": []
+  },
+  {
+    "id": "ack_btn",
+    "type": "inject",
+    "z": "tab1",
+    "name": "Acknowledge all alarms",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "payload": "all",
+    "payloadType": "str",
+    "once": false,
+    "x": 190,
+    "y": 220,
+    "wires": [
+      [
+        "ack_out"
+      ]
+    ]
+  },
+  {
+    "id": "ack_out",
+    "type": "mqtt out",
+    "z": "tab1",
+    "name": "factory/legacy_cnc_01/cmd/ack",
+    "topic": "factory/legacy_cnc_01/cmd/ack",
+    "qos": "1",
+    "retain": "false",
+    "broker": "broker",
+    "x": 480,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "inj_shock",
+    "type": "inject",
+    "z": "tab1",
+    "name": "Inject shock",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "payload": "shock",
+    "payloadType": "str",
+    "once": false,
+    "x": 170,
+    "y": 280,
+    "wires": [
+      [
+        "inj_out"
+      ]
+    ]
+  },
+  {
+    "id": "inj_noise",
+    "type": "inject",
+    "z": "tab1",
+    "name": "Inject noise",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "payload": "noise",
+    "payloadType": "str",
+    "once": false,
+    "x": 170,
+    "y": 340,
+    "wires": [
+      [
+        "inj_out"
+      ]
+    ]
+  },
+  {
+    "id": "inj_drift",
+    "type": "inject",
+    "z": "tab1",
+    "name": "Inject drift",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "payload": "drift",
+    "payloadType": "str",
+    "once": false,
+    "x": 170,
+    "y": 400,
+    "wires": [
+      [
+        "inj_out"
+      ]
+    ]
+  },
+  {
+    "id": "inj_out",
+    "type": "mqtt out",
+    "z": "tab1",
+    "name": "sim/legacy_cnc_01/cmd/inject",
+    "topic": "sim/legacy_cnc_01/cmd/inject",
+    "qos": "1",
+    "retain": "false",
+    "broker": "broker",
+    "x": 480,
+    "y": 310,
+    "wires": []
+  }
+]
